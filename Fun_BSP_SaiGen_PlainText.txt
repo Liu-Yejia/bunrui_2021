@@ -1,7 +1,7 @@
 Fun_BSP_SaiGen_PlainText<-function(x, n=1, straddle=FALSE)#文節パターンＢの再現
 {
   #测试环境
-  if(0){x<-corrected_text_pool[1]; n=2; straddle=FALSE}
+  if(0){x<-corrected_text_pool[200]; n=2; straddle=F}
   #library(dplyr)#因为之后要用pipe运算符
   #x为日语的plain text
   #n为n-gram中的n，默认为1
@@ -14,6 +14,7 @@ Fun_BSP_SaiGen_PlainText<-function(x, n=1, straddle=FALSE)#文節パターンＢ
   }
   连文节<-rep("", 分母3)#创建存储连文件的空向量
   for(i in 1:分母3){
+    #i<-1
     当前对象的序列号<-i:(i+n-1)
     for(j in 当前对象的序列号)
       连文节[i]<-paste0(连文节[i], res_cabocha[j])
@@ -24,8 +25,17 @@ Fun_BSP_SaiGen_PlainText<-function(x, n=1, straddle=FALSE)#文節パターンＢ
   }
   middle_res_for_LBS<-rep("", 分母3)#为连文件准备存储其中期结果的空向量
   for(i in 1:分母3){
+    #i<-1
     cat("开始处理第",i,"个连文节。\n")
-    current_res_mecab<-连文节[i]%>%Analytic_MeCab_429()#对于当前连文件，调用MeCab进行词素解析
+    current_LBS<-连文节[i]
+    if(str_detect(current_LBS, "^[（）]$")){
+      middle_res_for_LBS[i]<-""
+      next
+    }
+    if(str_detect(current_LBS, "^「.+$")){
+      (current_LBS<-str_sub(current_LBS, start=2))
+    }
+    current_res_mecab<-current_LBS%>%Analytic_MeCab_429()#对于当前连文件，调用MeCab进行词素解析
     middle_res_for_LBS[i]<-current_res_mecab%>%fun_BSPattern_reproduction()#对于当前连文件的词素解析结果抽取【文節パターンＢ】特征量
     cat("处理完成第",i,"个连文节。\n")
     # temp<-nrow(current_res_mecab)
@@ -33,6 +43,7 @@ Fun_BSP_SaiGen_PlainText<-function(x, n=1, straddle=FALSE)#文節パターンＢ
     # rm(current_res_mecab)
   }
   # 度数向量<-table(middle_res)
+  if(any(middle_res_for_LBS==""))middle_res_for_LBS<-middle_res_for_LBS[-which(middle_res_for_LBS=="")]
   freq<-sort(table(middle_res_for_LBS), decreasing=TRUE)
   相对度数向量集<-list(
     字符数=freq/分母1,#分母1为输入文本含字符数
@@ -40,5 +51,5 @@ Fun_BSP_SaiGen_PlainText<-function(x, n=1, straddle=FALSE)#文節パターンＢ
     文节数=freq/分母3#分母为输入文本含连文节数
   )
   分母集<-c(分母1, 分母2, 分母3)
-  list(度数向量=度数向量, 相对度数向量集=相对度数向量集, 分母集=分母集)
+  list(度数向量=freq, 相对度数向量集=相对度数向量集, 分母集=分母集)
 }
