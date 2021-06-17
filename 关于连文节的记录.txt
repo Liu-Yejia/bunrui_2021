@@ -1,0 +1,180 @@
+Fun_BSP_SaiGen<-function(x)#文節パターンＢの再現
+{
+  library(dplyr)#因为之后要用pipe运算符
+  #x为日语的plain text
+  res_cabocha<-fun_cabocha(x)#先将x切成n个文节
+  len_res_cabocha<-length(res_cabocha)#求n值
+  middle_res<-rep("", len_res_cabocha)#创空list存中期结果
+  #需要提前考虑最后比率化时用的分母
+  if(1){
+    分母1<-nchar(x)#x的总字数
+    分母2<-0#x的总词素数
+    分母3<-0#x的总文节数
+  }
+  for(i in 1:len_res_cabocha){
+    cat(i, " starts.\n")
+    current_res_mecab<-res_cabocha[i]%>%Analytic_MeCab_429()#对于当前文节用MeCab进行词素解析
+    middle_res[i]<-current_res_mecab%>%fun_BSPattern_reproduction()#对于当前文节的词素解析结果抽取【文節パターンＢ】特征量
+    cat(i, " ends.\n")
+    temp<-nrow(current_res_mecab)
+    当前文节含词素数<-ifelse(!is.null(temp), temp, 0)
+    分母2<-分母2+当前文节含词素数
+    分母3<-分母3+1
+    rm(current_res_mecab)
+  }
+  度数向量<-table(middle_res)
+  相对度数向量集<-list(
+    字符数=度数向量/分母1,
+    词素数=度数向量/分母2,
+    文节数=度数向量/分母3
+  )
+  分母集<-c(分母1, 分母2, 分母3)
+  list(度数向量=度数向量, 相对度数向量集=相对度数向量集, 分母集=分母集)
+}
+
+Fun_BSP_SaiGen_PlainText<-function(x, n=1, straddle=FALSE)#文節パターンＢの再現
+{
+  #测试环境
+  if(0){x<-corrected_text_pool[200]; n=2; straddle=F}
+  #library(dplyr)#因为之后要用pipe运算符
+  #x为日语的plain text
+  #n为n-gram中的n，默认为1
+  res_cabocha<-fun_cabocha(x)#先将x按文节切割
+  len_res_cabocha<-length(res_cabocha)#求x的长度（文节单位）
+  if(1){
+    分母1<-nchar(x)#x含字符数
+    分母2<-x%>%Analytic_MeCab_429()%>%nrow()#x含词素数
+    分母3<-len_res_cabocha-n+1#x含连文节数
+  }
+  连文节<-rep("", 分母3)#创建存储连文件的空向量
+  for(i in 1:分母3){
+    #i<-1
+    当前对象的序列号<-i:(i+n-1)
+    for(j in 当前对象的序列号)
+      连文节[i]<-paste0(连文节[i], res_cabocha[j])
+  }
+  if(!straddle){
+    连文节<-连文节[-which(str_detect(连文节, "^.*[。？].+$"))]#若straddle为真，则对连文节不做任何处理；若为否，则利用正规表现剔除【在非句末位置上，存在句号（准句号）】的要素
+    分母3<-length(连文节)#更新分母3，即输入文本含连文节数量（长度为n）
+  }
+  middle_res_for_LBS<-rep("", 分母3)#为连文件准备存储其中期结果的空向量
+  for(i in 1:分母3){
+    #i<-1
+    cat("开始处理第",i,"个连文节。\n")
+    current_LBS<-连文节[i]
+    if(str_detect(current_LBS, "^[（）]$")){
+      middle_res_for_LBS[i]<-""
+      next
+    }
+    if(str_detect(current_LBS, "^「.+$")){
+      (current_LBS<-str_sub(current_LBS, start=2))
+    }
+    current_res_mecab<-current_LBS%>%Analytic_MeCab_429()#对于当前连文件，调用MeCab进行词素解析
+    middle_res_for_LBS[i]<-current_res_mecab%>%fun_BSPattern_reproduction()#对于当前连文件的词素解析结果抽取【文節パターンＢ】特征量
+    cat("处理完成第",i,"个连文节。\n")
+    # temp<-nrow(current_res_mecab)
+    # 当前连文节含词素数<-ifelse(!is.null(temp), temp, 0)
+    # rm(current_res_mecab)
+  }
+  # 度数向量<-table(middle_res)
+  if(any(middle_res_for_LBS==""))middle_res_for_LBS<-middle_res_for_LBS[-which(middle_res_for_LBS=="")]
+  freq<-sort(table(middle_res_for_LBS), decreasing=TRUE)
+  相对度数向量集<-list(
+    字符数=freq/分母1,#分母1为输入文本含字符数
+    词素数=freq/分母2,#分母2为输入文本含词素数
+    文节数=freq/分母3#分母为输入文本含连文节数
+  )
+  分母集<-c(分母1, 分母2, 分母3)
+  list(度数向量=freq, 相对度数向量集=相对度数向量集, 分母集=分母集)
+}
+
+#利用修复（e.g., 删除连续的同一记号，或，对于在MeCab解析过程中报错的一部分关西方言，将其修正至对应的标准语）的文节的unigram数据，还原为plain text。
+corrected_text_pool<-rep("", 200)
+for(i in 1:200){
+  temp_text<-""
+  for(j in 1:length(bunsetsu[[i]])){
+    temp_text<-paste0(temp_text, bunsetsu[[i]][j])
+  }
+  corrected_text_pool[i]<-temp_text
+}
+
+save(corrected_text_pool, file="corrected_text_pool.rdata")
+corrected_text_pool<-str_replace_all(corrected_text_pool, "、「", "、")
+
+save(corrected_text_pool, file="corrected_text_pool.rdata")
+load(file="corrected_text_pool_1.rdata")#为含200元素的向量对象，在R环境中的占位符为corrected_text_pool
+length(corrected_text_pool)
+
+# test
+library(stringr)
+corrected_text_pool[200]%>%Fun_BSP_SaiGen_PlainText(n=2)->temp_res
+sum(temp_res$度数向量)
+#temp_res$相对度数向量集[[1]]
+
+#文節パターンＢのn-gram（n=1）
+phrase_pattern_1<-list()
+for(i in 1:200){
+  cat("--start:", i, "\n")
+  phrase_pattern_1[[i]]<-corrected_text_pool[i]%>%Fun_BSP_SaiGen_PlainText(n=1, straddle=TRUE)
+  cat("++end:", i, "\n")
+}
+
+#文節パターンＢのn-gram（n=2）
+phrase_pattern_2<-list()
+for(i in 1:200){
+  cat("--start:", i, "\n")
+  phrase_pattern_2[[i]]<-corrected_text_pool[i]%>%Fun_BSP_SaiGen_PlainText(n=2, straddle=FALSE)
+  cat("++end:", i, "\n")
+}
+save(phrase_pattern_2, file="phrase_pattern_2.rdata")
+
+#文節パターンＢのn-gram（n=3）
+phrase_pattern_3<-list()
+for(i in 1:200){
+  cat("--start:", i, "\n")
+  phrase_pattern_3[[i]]<-corrected_text_pool[i]%>%Fun_BSP_SaiGen_PlainText(n=3, straddle=FALSE)
+  cat("++end:", i, "\n")
+}
+save(phrase_pattern_3, file="phrase_pattern_3.rdata")
+
+for(i in 1:200){cat(length(phrase_pattern_3[[i]][[1]]), "\n")}
+
+#生成数据集
+fun_dataset_maker<-function(x){
+  if(0){ x<-phrase_pattern_1 }
+  freq_collection<-list()
+  names_collection<-NULL
+  for(i in 1:200){
+    freq_collection[[i]]<-x[[i]][[1]]#存储各作品的度数向量
+    names_collection<-c(names_collection, names(x[[i]][[1]]))#提取各作品的度数向量的要素名称，将其连接
+  }
+  names_collection<-unique(names_collection)#去重，得到变数字典（index）
+  num_col<-length(names_collection)#去重后的变数数
+  RES<-matrix(0, 200, num_col); colnames(RES)<-names_collection#赋列名
+  分母<-matrix(0, 200, 3); colnames(分母)<-c("num_char", "num_morp", "num_LBS")#存储各作品的3个分母（字符数，词素数，连文节数）
+  for(i in 1:200){
+    temp_len<-length(freq_collection[[i]])#测量度数向量的长度
+    temp_names<-names(freq_collection[[i]])#记录当前度数向量各要素名
+    new_order<-rep(0, temp_len)#为重新排序度数向量准备等长空向量
+    for(j in 1:temp_len){
+      new_order[j]<-which(names_collection==temp_names[j])#对当前度数向量各要素，逐个定位其在index中的位置
+    }
+    RES[i, new_order]<-freq_collection[[i]]#将经重新排序后的当前度数向量的各要素插入结果矩阵（RES）中的对应行
+    分母[i, ]<-x[[i]][[3]]#将当前度数向量对应的分母向量填入分母矩阵的对应行
+  }
+  #利用度数矩阵RES与分母矩阵“分母”求3个相对度数矩阵，分别对应3个分母
+  RES_char<-RES/分母[, 1]
+  RES_morp<-RES/分母[, 2]
+  RES_LBS<-RES/分母[, 3]
+  list(RES_char=RES_char, RES_morp=RES_morp, RES_LBS=RES_LBS)
+}
+#应用
+if(1){
+  phrase_pattern_1%>%fun_dataset_maker()->data_phrase_pattern_1
+  phrase_pattern_2%>%fun_dataset_maker()->data_phrase_pattern_2
+  phrase_pattern_3%>%fun_dataset_maker()->data_phrase_pattern_3
+  LBS_data<-list(data_phrase_pattern_1=data_phrase_pattern_1,
+                 data_phrase_pattern_2=data_phrase_pattern_2,
+                 data_phrase_pattern_3=data_phrase_pattern_3)
+  save(LBS_data, file="LBS_data.rdata")
+}
